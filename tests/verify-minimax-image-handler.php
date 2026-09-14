@@ -62,6 +62,13 @@ check('applies: case-insensitive domain match', $h->applies('image-01', 'https:/
 check('applies: bare host without scheme',      $h->applies('image-01', 'api.minimax.cn/v1'));
 check('applies: model prefix image-2 future',   $h->applies('image-2-foo', 'https://api.minimax.io/v1'));
 
+// Future-region auto-coverage: any URL containing `minimax` is treated as
+// MiniMax-shaped traffic, so new regions / CDNs work without a plugin update.
+check('applies: future region minimax.eu',      $h->applies('image-01', 'https://api.minimax.eu/v1'));
+check('applies: hypothetical CDN minimax-cdn',  $h->applies('image-01', 'https://cdn.minimax-cdn.com/v1'));
+check('applies: user-supplied my-minimax.example',
+                                                $h->applies('image-01', 'https://my-minimax.example/v1'));
+
 // ---------------------------------------------------------------------
 // applies() — defense in depth: must reject misconfigurations
 // ---------------------------------------------------------------------
@@ -75,14 +82,13 @@ check('rejects: empty base url',                 !$h->applies('image-01', ''));
 check('rejects: null base url',                  !$h->applies('image-01', null));
 check('rejects: empty model + empty url',        !$h->applies('', ''));
 
-// Documented behaviour: substring match tolerates path/port/scheme noise,
-// so a URL that *contains* `minimax.cn` as a substring is treated as
-// MiniMax even when the actual host is unrelated. This is intentional:
-// defending against user-entered URL typos is out of scope for the dual
-// filter (which defends against wrong model names on right URLs, and
-// vice versa). A user who can be tricked into typing a malicious URL
-// into a settings field has a bigger problem than a substring collision.
-check('substring: minimax.cn substring anywhere still matches',
+// Documented behaviour: substring match is intentionally permissive —
+// the Base URL is user-supplied, so any URL containing `minimax` plus an
+// `image-*` model is treated as MiniMax-shaped traffic. This is by design:
+// defending against typos in user-entered URLs is out of scope. The dual
+// filter still defends against the other axis (wrong model on a real
+// MiniMax URL).
+check('substring: minimax substring anywhere still matches',
                                                   $h->applies('image-01', 'https://my-minimax.cn.evil.com/v1'));
 
 // ---------------------------------------------------------------------

@@ -18,13 +18,22 @@
  *      - MiniMax:   { data: { image_urls: [...], image_base64: [...] } }
  *
  * Detection is intentionally dual-keyed: this handler only applies when
- * BOTH the Base URL contains a known MiniMax domain AND the model id
- * matches MiniMax's image-model prefix. MiniMax image model names are
- * intentionally short ("image-01", "image-01-live"), so URL-only matching
- * would risk false positives against other providers' models that happen
- * to share the prefix. Model-only matching would risk false positives when
- * the user accidentally points an OpenAI-style endpoint at a MiniMax-shaped
- * model. Requiring both signals eliminates both classes of mistake.
+ * BOTH the Base URL contains the substring `minimax` (case-insensitive)
+ * AND the model id matches MiniMax's image-model prefix. MiniMax image
+ * model names are intentionally short ("image-01", "image-01-live"), so
+ * URL-only matching would risk false positives against other providers'
+ * models that happen to share the prefix; model-only matching would risk
+ * false positives when the user accidentally points an OpenAI-style
+ * endpoint at a MiniMax-shaped model. Requiring both signals eliminates
+ * both classes of mistake.
+ *
+ * The URL check is intentionally a single substring (`minimax`) rather
+ * than a curated allowlist of MiniMax domains. The Base URL is a
+ * user-supplied setting — if a user types `my-minimax-cdn.example` and
+ * pairs it with an `image-*` model, they have explicitly opted into
+ * MiniMax-shaped request handling and the plugin honours that intent.
+ * This also means future MiniMax regions (`minimax.eu`, `minimax.us`,
+ * `cdn.minimax-cdn.com`, …) work automatically without a plugin update.
  *
  * This handler is stateless and safe to instantiate once per request.
  *
@@ -38,22 +47,6 @@ namespace WordPress\DuetGAIConnector\Models\ImageGeneration;
  */
 class MiniMaxImageHandler
 {
-    /**
-     * Known MiniMax API host substrings.
-     *
-     * Includes the legacy `minimaxi.com` (note the second "i") domain so
-     * users who haven't migrated their settings still work. Matching is
-     * case-insensitive substring on the full base URL, so trailing paths
-     * like `/v1` and ports like `:443` are tolerated automatically.
-     *
-     * @var list<string>
-     */
-    private const MINIMAX_DOMAIN_HINTS = [
-        'minimax.cn',
-        'minimax.io',
-        'minimaxi.com',
-    ];
-
     /**
      * Image-model prefix used by all current MiniMax image models
      * (`image-01`, `image-01-live`, future `image-02-*`, ...).
@@ -92,8 +85,9 @@ class MiniMaxImageHandler
     /**
      * Whether this handler applies to the given request.
      *
-     * Dual-filter: BOTH the Base URL must contain a known MiniMax domain
-     * AND the model id must start with MiniMax's image-model prefix.
+     * Dual-filter: BOTH the Base URL must contain the substring
+     * `minimax` (case-insensitive) AND the model id must start with
+     * MiniMax's image-model prefix.
      *
      * A null/empty base URL or model id never matches — the handler must
      * not silently transform OpenAI traffic.
@@ -235,24 +229,23 @@ class MiniMaxImageHandler
     }
 
     /**
-     * Case-insensitive substring check against known MiniMax domains.
+     * Case-insensitive substring check that the Base URL identifies as
+     * MiniMax.
      *
-     * Substring (not host-only) matching is deliberate: the user-supplied
-     * base URL may include a path prefix like `https://api.minimax.io/v1`
-     * or a port, and we still want to recognise it.
+     * Single-substring match on `minimax` rather than a curated allowlist:
+     * the Base URL is a user-supplied setting, so any URL the user types
+     * that contains `minimax` and is paired with an `image-*` model is
+     * treated as MiniMax-shaped traffic. This auto-covers current
+     * (`api.minimax.cn`, `api.minimax.io`, legacy `api.minimaxi.com`) and
+     * future (`api.minimax.eu`, `cdn.minimax-cdn.com`, …) endpoints
+     * without a plugin update.
      *
      * @param string $baseUrl
      * @return bool
      */
     private function urlMatchesMinimax(string $baseUrl): bool
     {
-        $haystack = strtolower($baseUrl);
-        foreach (self::MINIMAX_DOMAIN_HINTS as $needle) {
-            if (strpos($haystack, $needle) !== false) {
-                return true;
-            }
-        }
-        return false;
+        return strpos(strtolower($baseUrl), 'minimax') !== false;
     }
 
     /**
