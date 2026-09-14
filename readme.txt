@@ -16,7 +16,7 @@ DuetG AI Connector allows WordPress AI Client to connect to any AI service that 
 
 * Ollama (local AI)
 * LM Studio (local AI)
-* MiniMax
+* MiniMax (text + image generation)
 * Moonshot
 * DeepSeek
 * SiliconFlow
@@ -76,6 +76,12 @@ If you need more consistent results, consider using a model that reliably return
 * DeepSeek: `https://api.deepseek.com/v1`
 * SiliconFlow: `https://api.siliconflow.cn/v1`
 * Other providers: Check their documentation
+
+= Does this plugin support MiniMax image generation? =
+
+Yes. MiniMax image models such as `image-01` and `image-01-live` work out of the box. Set your Base URL to a MiniMax endpoint (e.g., `https://api.minimax.io/v1` or `https://api.minimax.cn/v1`) and the Model Name to an image model (any name starting with `image-`). The plugin automatically detects the combination and bridges the four API differences (endpoint path, `response_format` enum, response top-level shape, image delivery channel ordering) so responses look identical to OpenAI's.
+
+Works with any MiniMax region — detection only checks for the `minimax` substring in the Base URL.
 
 = Do I need an API key? =
 

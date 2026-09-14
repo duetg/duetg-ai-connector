@@ -8,7 +8,7 @@ DuetG AI Connector allows WordPress AI Client to connect to any AI service that 
 
 * [Ollama](https://ollama.com/) (local AI)
 * [LM Studio](https://lmstudio.ai/) (local AI)
-* [MiniMax](https://www.minimax.io/)
+* [MiniMax](https://www.minimax.io/) (text + image generation)
 * [Moonshot](https://www.moonshot.ai/)
 * [DeepSeek](https://www.deepseek.com/)
 * [SiliconFlow](https://siliconflow.cn/)
@@ -18,6 +18,7 @@ DuetG AI Connector allows WordPress AI Client to connect to any AI service that 
 
 * Text generation with customizable Base URL and model
 * Image generation support
+* Dedicated MiniMax image generation (image-01, image-01-live) with automatic API bridging
 * Works with any OpenAI-compatible API
 * Simple configuration through WordPress admin
 * **Compatible with [WordPress AI plugin](https://wordpress.org/plugins/ai/)**
@@ -78,6 +79,12 @@ If you need more consistent results, consider using a model that reliably return
 * DeepSeek: `https://api.deepseek.com/v1`
 * SiliconFlow: `https://api.siliconflow.cn/v1`
 * Other providers: Check their documentation
+
+### Does this plugin support MiniMax image generation?
+
+Yes. MiniMax image models such as `image-01` and `image-01-live` work out of the box. Set your Base URL to a MiniMax endpoint (e.g., `https://api.minimax.io/v1` or `https://api.minimax.cn/v1`) and the Model Name to an image model (any name starting with `image-`). The plugin automatically detects the combination and bridges the four API differences (endpoint path, `response_format` enum, response top-level shape, image delivery channel ordering) so responses look identical to OpenAI's.
+
+Works with any MiniMax region — detection only checks for the `minimax` substring in the Base URL.
 
 ### Do I need an API key?
 
@@ -141,6 +148,14 @@ $files = $result->toImageFiles();
 ```
 
 ## Changelog
+
+### 0.3.4
+* Added support for MiniMax image generation (image-01, image-01-live) via a dual-filter handler that matches MiniMax Base URL plus image-model prefix and bridges the four OpenAI/MiniMax API differences (endpoint path, response_format enum, response top-level shape, image delivery channel ordering)
+* Refactored MiniMax URL detection to a single substring check so future MiniMax regions and CDN domains work without a plugin update
+* Removed dead getModelId() overrides from text and image models (no longer required after the SDK moved to $this->metadata()->getId())
+* Removed unused jQuery dependency from the Test AI admin page (the page is vanilla JS)
+* Bumped "Tested up to" to WordPress 7.1
+* Updated Stable tag to match plugin version
 
 ### 0.3.3
 * Fixed PHP 8.x "Undefined variable $prompt" warning on Test AI page initial load
