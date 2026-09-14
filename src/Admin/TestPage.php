@@ -39,10 +39,11 @@ class TestPage
     {
         $plugin_url = plugin_dir_url(dirname(__DIR__, 2) . '/duetg-ai-connector.php');
         $js_url = $plugin_url . 'assets/js/test-page.js';
+        // test-page.js is vanilla JS — no jQuery dependency.
         wp_enqueue_script(
             'duetgaicon-test-page',
             $js_url,
-            array('jquery'),
+            array(),
             filemtime(dirname(__DIR__, 2) . '/assets/js/test-page.js'),
             false
         );
