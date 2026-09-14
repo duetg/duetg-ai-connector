@@ -346,11 +346,11 @@ foreach ($files as $file) {
     // For inline images (base64)
     if ($file->isInline()) {
         $dataUri = $file->getDataUri();
-        echo '<img src="' . esc_url($dataUri) . '" />';
+        echo '&lt;img src="' . esc_url($dataUri) . '" /&gt;';
     }
     // For remote images (URL)
     if ($file->isRemote()) {
-        echo '<img src="' . esc_url($file->getUrl()) . '" />';
+        echo '&lt;img src="' . esc_url($file->getUrl()) . '" /&gt;';
     }
 }</pre>
             </div>
