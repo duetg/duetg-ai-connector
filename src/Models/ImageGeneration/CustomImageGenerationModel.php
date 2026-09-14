@@ -13,8 +13,10 @@ use WordPress\AiClient\Messages\DTO\MessagePart;
 use WordPress\AiClient\Messages\Enums\MessageRoleEnum;
 use WordPress\AiClient\Providers\OpenAiCompatibleImplementation\AbstractOpenAiCompatibleImageGenerationModel;
 use WordPress\AiClient\Providers\Http\DTO\Request;
+use WordPress\AiClient\Providers\Http\DTO\Response;
 use WordPress\AiClient\Providers\Http\Enums\HttpMethodEnum;
 use WordPress\AiClient\Results\DTO\Candidate;
+use WordPress\AiClient\Results\DTO\GenerativeAiResult;
 use WordPress\AiClient\Results\Enums\FinishReasonEnum;
 use WordPress\DuetGAIConnector\Settings\Settings;
 use WordPress\DuetGAIConnector\Helper;
@@ -24,9 +26,20 @@ use WordPress\DuetGAIConnector\Helper;
  *
  * This model allows connecting to any OpenAI-compatible image generation API,
  * such as Ollama, Stable Diffusion endpoints, or other custom image APIs.
+ *
+ * Provider-specific quirks (currently only MiniMax) are encapsulated in
+ * {@see MiniMaxImageHandler} and consulted at three points: endpoint path
+ * remap, request param adjustment, and response shape normalisation.
  */
 class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGenerationModel
 {
+    /**
+     * Lazily-initialised MiniMax image handler.
+     *
+     * @var MiniMaxImageHandler|null
+     */
+    private $minimaxImageHandler;
+
     /**
      * Get the base URL for API requests
      *
@@ -38,12 +51,32 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
     }
 
     /**
+     * Get (or lazily create) the MiniMax image handler.
+     *
+     * Lazy because most requests will not be MiniMax, and the handler
+     * is stateless so a single instance can be reused safely.
+     *
+     * @return MiniMaxImageHandler
+     */
+    private function getMinimaxImageHandler(): MiniMaxImageHandler
+    {
+        if ($this->minimaxImageHandler === null) {
+            $this->minimaxImageHandler = new MiniMaxImageHandler();
+        }
+        return $this->minimaxImageHandler;
+    }
+
+    /**
      * Create a request object for the provider's API
      *
      * The model ID is sourced from metadata (set by CustomImageModelMetadataDirectory
      * from Settings::getImageModel()); the SDK parent's prepareGenerateImageParams()
      * populates $data['model'] with $this->metadata()->getId() before this is called,
      * so no override is needed here.
+     *
+     * If the configured endpoint is MiniMax (dual-filter: MiniMax domain in
+     * Base URL AND MiniMax-style model id), the OpenAI-style
+     * `images/generations` path is remapped to MiniMax's `image_generation`.
      *
      * @param HttpMethodEnum $method
      * @param string $path
@@ -60,14 +93,21 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         // Get base URL from settings
         $base_url = $this->getBaseUrl();
 
+        // Apply MiniMax-specific endpoint remap (if applicable).
+        $model_id = $this->metadata()->getId();
+        $path = $this->getMinimaxImageHandler()->remapPath($path, $base_url, $model_id);
+
         return new Request($method, $base_url . '/' . ltrim($path, '/'), $headers, $data);
     }
 
     /**
      * Prepare generate image parameters
      *
-     * Override to force b64_json format for compatibility with all OpenAI-compatible APIs
-     * (e.g., SiliconFlow, Ollama, etc.)
+     * Default behaviour: force `b64_json` for OpenAI-compatible APIs that
+     * ignore the configured response_format (SiliconFlow, Ollama, etc.).
+     *
+     * For MiniMax endpoints, swap to MiniMax's `base64` enum value via
+     * {@see MiniMaxImageHandler::prepareParams()}.
      *
      * @param array $prompt The prompt messages
      * @return array The prepared parameters
@@ -79,6 +119,13 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         // Force b64_json format - some providers ignore the response_format parameter
         // and always return URL, but we need base64 for WordPress AI compatibility
         $params['response_format'] = 'b64_json';
+
+        // Provider-specific overrides (e.g., MiniMax uses "base64" instead of "b64_json").
+        $params = $this->getMinimaxImageHandler()->prepareParams(
+            $params,
+            $this->getBaseUrl(),
+            $this->metadata()->getId()
+        );
 
         return $params;
     }
@@ -114,6 +161,66 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         $parts = [new MessagePart($imageFile)];
         $message = new Message(MessageRoleEnum::model(), $parts);
         return new Candidate($message, FinishReasonEnum::stop());
+    }
+
+    /**
+     * Parse the response from the API endpoint to a generative AI result.
+     *
+     * Override to handle provider-specific response shapes before
+     * delegating to the SDK parent's standard parsing. Currently:
+     *
+     *   - MiniMax returns `{data: {image_urls[], image_base64[]}}` rather
+     *     than OpenAI's `{data: [{url}|{b64_json}]}`. The handler flattens
+     *     this into the SDK's expected shape so the existing
+     *     {@see self::parseResponseChoiceToCandidate()} can run unchanged.
+     *
+     * When the handler does not apply (or the response is already in
+     * OpenAI shape) we delegate straight to the parent.
+     *
+     * @param Response $response        The HTTP response to parse.
+     * @param string   $expectedMimeType The expected MIME type.
+     * @return GenerativeAiResult
+     */
+    protected function parseResponseToGenerativeAiResult(Response $response, string $expectedMimeType = 'image/png'): GenerativeAiResult
+    {
+        $base_url = $this->getBaseUrl();
+        $model_id = $this->metadata()->getId();
+        $handler  = $this->getMinimaxImageHandler();
+
+        // Fast path: handler doesn't apply, or response body is empty/non-array.
+        $data = $response->getData();
+        if (!$handler->applies($model_id, $base_url) || !is_array($data)) {
+            return parent::parseResponseToGenerativeAiResult($response, $expectedMimeType);
+        }
+
+        $transformed = $handler->transformResponse($data, $base_url, $model_id);
+
+        // If the handler didn't actually change anything (e.g., MiniMax
+        // returned an error envelope, or data was already flat), delegate
+        // unchanged so the parent's error reporting stays accurate.
+        if ($transformed === $data) {
+            return parent::parseResponseToGenerativeAiResult($response, $expectedMimeType);
+        }
+
+        $rewrittenBody = json_encode($transformed);
+        if ($rewrittenBody === false) {
+            // Encoding the (already-decoded) data failed — fall back to the
+            // original response and let the parent surface a meaningful error.
+            return parent::parseResponseToGenerativeAiResult($response, $expectedMimeType);
+        }
+
+        $rewritten = new Response(
+            $response->getStatusCode(),
+            $response->getHeaders(),
+            $rewrittenBody
+        );
+
+        Helper::debug('MiniMax image response transformed to OpenAI shape', [
+            'model_id' => $model_id,
+            'choices_count' => isset($transformed['data']) && is_array($transformed['data']) ? count($transformed['data']) : 0,
+        ]);
+
+        return parent::parseResponseToGenerativeAiResult($rewritten, $expectedMimeType);
     }
 
     /**
