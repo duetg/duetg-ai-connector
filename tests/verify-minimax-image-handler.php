@@ -20,6 +20,20 @@ if (!defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/');
 }
 
+// array_is_list() is PHP 8.1+ native. WordPress 6.5+ polyfills it in
+// wp-includes/compat.php, so production runtime is always covered. This
+// standalone test harness runs outside WordPress, so we polyfill here too
+// to keep the verification script portable across PHP 7.4 / 8.0 CI hosts.
+if (!function_exists('array_is_list')) {
+    function array_is_list(array $arr): bool
+    {
+        if ($arr === []) {
+            return true;
+        }
+        return array_keys($arr) === range(0, count($arr) - 1);
+    }
+}
+
 require_once __DIR__ . '/../src/Models/ImageGeneration/MiniMaxImageHandler.php';
 
 use WordPress\DuetGAIConnector\Models\ImageGeneration\MiniMaxImageHandler;
