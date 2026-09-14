@@ -28,22 +28,6 @@ use WordPress\DuetGAIConnector\Helper;
 class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGenerationModel
 {
     /**
-     * Get the model ID to use for API requests
-     *
-     * @return string
-     */
-    protected function getModelId(): string
-    {
-        $model = Settings::getImageModel();
-        if (!empty($model)) {
-            return $model;
-        }
-
-        // Fallback to metadata ID if not set
-        return $this->metadata()->getId();
-    }
-
-    /**
      * Get the base URL for API requests
      *
      * @return string
@@ -55,6 +39,11 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
 
     /**
      * Create a request object for the provider's API
+     *
+     * The model ID is sourced from metadata (set by CustomImageModelMetadataDirectory
+     * from Settings::getImageModel()); the SDK parent's prepareGenerateImageParams()
+     * populates $data['model'] with $this->metadata()->getId() before this is called,
+     * so no override is needed here.
      *
      * @param HttpMethodEnum $method
      * @param string $path
@@ -68,14 +57,6 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         array $headers = [],
         $data = null
     ): Request {
-        // Get model ID from settings
-        $model_id = $this->getModelId();
-
-        // If data is an array and has 'model' key, override with setting
-        if (is_array($data) && isset($data['model'])) {
-            $data['model'] = $model_id;
-        }
-
         // Get base URL from settings
         $base_url = $this->getBaseUrl();
 

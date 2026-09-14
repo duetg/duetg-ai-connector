@@ -31,22 +31,6 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
     private $reviewNotesNormalizer;
 
     /**
-     * Get the model ID to use for API requests
-     *
-     * @return string
-     */
-    protected function getModelId(): string
-    {
-        $model = Settings::getTextModel();
-        if (!empty($model)) {
-            return $model;
-        }
-
-        // Fallback to metadata ID if no setting
-        return $this->metadata()->getId();
-    }
-
-    /**
      * Get the base URL for API requests
      *
      * @return string
@@ -59,11 +43,15 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
     /**
      * Get model handler if available
      *
+     * The model ID comes from metadata (set by CustomTextModelMetadataDirectory
+     * from Settings::getTextModel()), which is the same value the SDK parent's
+     * prepareGenerateTextParams() uses to populate $data['model'].
+     *
      * @return ModelHandlerInterface|null
      */
     private function getModelHandler(): ?ModelHandlerInterface
     {
-        return ModelHandlerRegistry::getHandler($this->getModelId());
+        return ModelHandlerRegistry::getHandler($this->metadata()->getId());
     }
 
     /**
@@ -94,13 +82,11 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
         array $headers = [],
         $data = null
     ): Request {
-        // Get model ID from settings
-        $model_id = $this->getModelId();
-
-        // If data is an array and has 'model' key, override with setting
-        if (is_array($data) && isset($data['model'])) {
-            $data['model'] = $model_id;
-        }
+        // The model ID comes from metadata (set by CustomTextModelMetadataDirectory
+        // from Settings::getTextModel()). The SDK parent's prepareGenerateTextParams()
+        // already populates $data['model'] with $this->metadata()->getId(), so no
+        // override is needed here — we only source it for debug logging.
+        $model_id = $this->metadata()->getId();
 
         // Apply model-specific handler if available (e.g., MiniMax)
         $handler = $this->getModelHandler();
