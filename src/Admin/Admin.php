@@ -94,7 +94,7 @@ class Admin
                                 value="<?php echo esc_attr($text_base_url); ?>"
                                 class="regular-text"
                                 placeholder="https://api.openai.com/v1">
-                            <p class="description"><?php esc_html_e('The base URL for the text generation API (e.g., https://api.openai.com/v1).', 'duetg-ai-connector'); ?></p>
+                            <p class="description"><?php esc_html_e('The base URL for the text generation API. Use your OpenAI-compatible provider URL — the placeholder above shows the default.', 'duetg-ai-connector'); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -126,7 +126,7 @@ class Admin
                                 value="<?php echo esc_attr($image_base_url); ?>"
                                 class="regular-text"
                                 placeholder="https://api.openai.com/v1">
-                            <p class="description"><?php esc_html_e('The base URL for the image generation API (e.g., https://api.openai.com/v1).', 'duetg-ai-connector'); ?></p>
+                            <p class="description"><?php esc_html_e('The base URL for the image generation API. Use your OpenAI-compatible provider URL — the placeholder above shows the default.', 'duetg-ai-connector'); ?></p>
                         </td>
                     </tr>
                     <tr>
