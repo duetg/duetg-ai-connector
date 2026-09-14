@@ -2,11 +2,11 @@
 Contributors: duetg
 Tags: ai, openai, gpt, artificial-intelligence, connector
 Requires at least: 7.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Stable tag: 0.3.3
+Stable tag: 0.3.4
 
 Connect WordPress AI Client to any OpenAI-compatible AI API provider.
 
@@ -141,6 +141,14 @@ This setting applies to both text and image models when using local AI providers
 3. Test AI screen - Verify your AI configuration and test text/image generation.
 
 == Changelog ==
+
+= 0.3.4 =
+* Added support for MiniMax image generation (image-01, image-01-live) via a dual-filter handler that matches MiniMax Base URL plus image-model prefix and bridges the four OpenAI/MiniMax API differences (endpoint path, response_format enum, response top-level shape, image delivery channel ordering)
+* Refactored MiniMax URL detection to a single substring check so future MiniMax regions and CDN domains work without a plugin update
+* Removed dead getModelId() overrides from text and image models (no longer required after the SDK moved to $this->metadata()->getId())
+* Removed unused jQuery dependency from the Test AI admin page (the page is vanilla JS)
+* Bumped "Tested up to" to WordPress 7.1
+* Updated Stable tag to match plugin version
 
 = 0.3.3 =
 * Fixed PHP 8.x "Undefined variable $prompt" warning on Test AI page initial load
