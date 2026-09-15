@@ -310,6 +310,7 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
 
         if (is_wp_error($wpResponse)) {
             throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- WP_Error::get_error_message() returns internal error text, not user input; this message is thrown, not echoed
                 sprintf('Image edit request failed: %s', $wpResponse->get_error_message())
             );
         }

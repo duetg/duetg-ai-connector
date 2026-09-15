@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="DuetG AI Connector">
+	<description>Custom PHPCS ruleset for the DuetG AI Connector plugin. Excludes the tests/ directory, which contains CLI verification scripts that polyfill WordPress functions for local testing and are not shipped to end users.</description>
+
+	<!--
+		The tests/ directory holds standalone CLI verification scripts (verify-image-refinement.php,
+		verify-minimax-image-handler.php). They are not part of the WordPress runtime — they polyfill
+		WP functions for local execution and are intentionally not PHPCS-clean. Excluding them keeps
+		the plugin source PHPCS-clean without polluting it with phpcs:ignore comments.
+	-->
+	<exclude-pattern>tests/*</exclude-pattern>
+</ruleset>

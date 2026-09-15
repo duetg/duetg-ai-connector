@@ -65,8 +65,13 @@ class TestPage
             $reference_filename = '';
 
             if ($needs_reference) {
-                if (!empty($_FILES['reference_image']['tmp_name']) && is_uploaded_file($_FILES['reference_image']['tmp_name'])) {
-                    $bytes = file_get_contents($_FILES['reference_image']['tmp_name']);
+                // is_uploaded_file() guarantees $_FILES['reference_image']['tmp_name'] is a real upload,
+                // so it is safe to read from here without further sanitization.
+                if (
+                    !empty($_FILES['reference_image']['tmp_name'])
+                    && is_uploaded_file($_FILES['reference_image']['tmp_name']) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validates the tmp_name
+                ) {
+                    $bytes = file_get_contents($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated the tmp_name on the line above
                     $mime = !empty($_FILES['reference_image']['type']) ? sanitize_text_field($_FILES['reference_image']['type']) : 'image/png';
                     $reference_filename = !empty($_FILES['reference_image']['name']) ? sanitize_file_name($_FILES['reference_image']['name']) : 'reference.png';
                     if ($bytes !== false && $bytes !== '') {
@@ -269,7 +274,11 @@ class TestPage
                                 <input type="file" name="reference_image" id="reference_image" accept="image/png,image/jpeg,image/webp,image/gif" />
                                 <p class="description"><?php esc_html_e('Required for image refinement. The provider will modify this image based on the prompt.', 'duetg-ai-connector'); ?></p>
                                 <?php if ($reference_filename !== ''): ?>
-                                    <p class="description"><?php echo esc_html(sprintf(__('Last uploaded: %s', 'duetg-ai-connector'), $reference_filename)); ?></p>
+                                    <p class="description"><?php echo esc_html(sprintf(
+                                        // translators: %s is the original filename of the uploaded reference image.
+                                        __('Last uploaded: %s', 'duetg-ai-connector'),
+                                        $reference_filename
+                                    )); ?></p>
                                 <?php endif; ?>
                             </td>
                         </tr>
