@@ -242,6 +242,93 @@ check('roundtrip: data is a list of choice objects',
     is_array($roundtrip['data']) && array_is_list($roundtrip['data']) && count($roundtrip['data']) === 4);
 
 // ---------------------------------------------------------------------
+// prepareEditBody() — refinement payload for MiniMax
+// ---------------------------------------------------------------------
+// Per the MiniMax image_generation API spec, image-to-image requests must
+// use the `subject_reference` field with shape
+//   [{ type: "character", image_file: <URL or base64 Data URL> }]
+// (the only currently-supported reference type). The legacy `image: [...]`
+// field is silently ignored by MiniMax, which causes the model to fall back
+// to plain text-to-image — the symptom users see is "the refined image has
+// nothing to do with the reference".
+
+$pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+$dataUri   = 'data:image/png;base64,' . $pngBase64;
+
+$mBody = $h->prepareEditBody(
+    $pngBase64,
+    'image/png',
+    'Make the sky red',
+    'image-01',
+    'base64',
+    'https://api.minimax.cn/v1'
+);
+check('edit body: returns a non-null array for MiniMax', is_array($mBody));
+check('edit body: uses subject_reference field (not legacy "image")',
+    isset($mBody['subject_reference']) && !isset($mBody['image']));
+check('edit body: subject_reference is a list', is_array($mBody['subject_reference']) && array_is_list($mBody['subject_reference']));
+check('edit body: exactly one subject reference entry',
+    is_array($mBody['subject_reference']) && count($mBody['subject_reference']) === 1);
+check('edit body: reference entry has type=character',
+    $mBody['subject_reference'][0]['type'] === 'character');
+check('edit body: reference image_file is the Data URI',
+    $mBody['subject_reference'][0]['image_file'] === $dataUri);
+check('edit body: model id is preserved',                       $mBody['model'] === 'image-01');
+check('edit body: prompt is preserved',                         $mBody['prompt'] === 'Make the sky red');
+check('edit body: response_format is preserved',                $mBody['response_format'] === 'base64');
+
+// MIME default — when caller doesn't know the MIME, the data URI must
+// still declare one so MiniMax doesn't reject the payload.
+$mBodyNoMime = $h->prepareEditBody(
+    $pngBase64,
+    '',
+    'Make it blue',
+    'image-01',
+    'base64',
+    'https://api.minimax.cn/v1'
+);
+check('edit body: empty MIME falls back to image/png',
+    strpos($mBodyNoMime['subject_reference'][0]['image_file'], 'data:image/png;base64,') === 0);
+
+// JSON roundtrip — the body must serialise + parse cleanly via
+// json_encode/json_decode (what wp_remote_post ends up doing).
+$roundtripBody = json_decode(json_encode($mBody), true);
+check('edit body: roundtrips through JSON encode/decode',         $roundtripBody === $mBody);
+check('edit body: roundtripped subject_reference image_file intact',
+    $roundtripBody['subject_reference'][0]['image_file'] === $dataUri);
+
+// Non-MiniMax must fall through unchanged.
+$nullBody = $h->prepareEditBody(
+    $pngBase64,
+    'image/png',
+    'Make it green',
+    'dall-e-3',
+    'b64_json',
+    'https://api.openai.com/v1'
+);
+check('edit body: returns null for non-MiniMax provider',        $nullBody === null);
+
+$nullBodyUrl = $h->prepareEditBody(
+    $pngBase64,
+    'image/png',
+    'Make it green',
+    'image-01',
+    'b64_json',
+    'https://api.openai.com/v1' // wrong model, wrong URL
+);
+check('edit body: returns null when only URL is MiniMax',        $nullBodyUrl === null);
+
+$nullBodyModel = $h->prepareEditBody(
+    $pngBase64,
+    'image/png',
+    'Make it green',
+    'MiniMax-Text-01',
+    'b64_json',
+    'https://api.minimax.cn/v1' // wrong model, MiniMax URL
+);
+check('edit body: returns null when only model is MiniMax',       $nullBodyModel === null);
+
+// ---------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------
 echo "\n";

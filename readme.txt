@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 7.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Stable tag: 0.3.5
+Stable tag: 0.3.4
 
 Connect WordPress AI Client to any OpenAI-compatible AI API provider.
 
@@ -147,12 +147,6 @@ This setting applies to both text and image models when using local AI providers
 3. Test AI screen - Verify your AI configuration and test text/image generation.
 
 == Changelog ==
-
-= 0.3.5 =
-* Added image refinement (modify a previously generated image with an additional prompt) by overriding generateImageResult to route to OpenAI's images/edits endpoint with multipart/form-data when a reference file is attached
-* Extended image metadata input modalities to support both text-only and text+image prompt shapes so the official WordPress AI plugin's is_supported_for_image_generation() returns true for refinement requests
-* Added MiniMax-aware dispatch for refinement (MiniMax does not expose images/edits): refinement requests are routed to MiniMax's image_generation endpoint with the reference image as an inline base64 data URI alongside the prompt
-* Added an "Image Refinement" option on the Test AI admin page so the new feature can be exercised without the block editor
 
 = 0.3.4 =
 * Added support for MiniMax image generation (image-01, image-01-live) via a dual-filter handler that matches MiniMax Base URL plus image-model prefix and bridges the four OpenAI/MiniMax API differences (endpoint path, response_format enum, response top-level shape, image delivery channel ordering)

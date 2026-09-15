@@ -173,17 +173,27 @@ class MiniMaxImageHandler
      * Build the JSON body that MiniMax's `image_generation` endpoint
      * accepts for a refinement request (prompt + reference image).
      *
-     * OpenAI's `images/edits` endpoint requires multipart/form-data; MiniMax
-     * accepts the same conceptual payload as a JSON object whose
-     * `image` field carries either a public URL OR a base64-encoded data
-     * URI (the `data:image/...;base64,...` form). This helper produces the
-     * JSON shape so refinement can be sent to MiniMax via
-     * `wp_remote_post()` with `Content-Type: application/json`.
+     * Per the MiniMax image_generation API spec, image-to-image requests
+     * carry the reference under the `subject_reference` field — NOT under
+     * a generic `image` key. Each entry is shaped as
+     * `{ type: "character", image_file: <URL or base64 Data URL> }`.
+     * The only currently-supported reference type is `character`
+     * (single, front-facing portrait) and the spec explicitly notes
+     * "Only a single subject reference is supported per request", so we
+     * emit exactly one entry.
+     *
+     * Sending the reference under any other field name (we used `image`
+     * previously) is silently ignored by MiniMax, which makes the model
+     * fall back to plain text-to-image — the user-visible symptom is
+     * "the refined image has nothing to do with the reference image".
      *
      * Returns null when this handler does not apply — callers should fall
      * back to the OpenAI multipart edits flow in that case.
      *
      * @since 0.3.5
+     * @since 0.3.6 Reworked payload shape to match MiniMax's
+     *              `subject_reference` field. The previous `image: [...]`
+     *              shape was a no-op against the MiniMax API.
      *
      * @param string      $base64     Raw base64 of the reference image (no
      *                                data URI prefix).
@@ -209,10 +219,15 @@ class MiniMaxImageHandler
         $dataUri = sprintf('data:%s;base64,%s', $mimeType !== '' ? $mimeType : 'image/png', $base64);
 
         return [
-            'model'          => $modelId,
-            'prompt'         => $prompt,
-            'image'          => [$dataUri],
-            'response_format' => $responseFormat,
+            'model'             => $modelId,
+            'prompt'            => $prompt,
+            'subject_reference' => [
+                [
+                    'type'       => 'character',
+                    'image_file' => $dataUri,
+                ],
+            ],
+            'response_format'   => $responseFormat,
         ];
     }
 
