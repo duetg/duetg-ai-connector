@@ -302,36 +302,7 @@ msgstr ""
 msgid "Text generation with custom OpenAI-compatible API provider"
 msgstr ""
 
-#: src/Admin/TestPage.php:90
-msgid "Please upload a reference image for image refinement."
-msgstr ""
-
 #: src/Admin/TestPage.php:195
 msgid "No image files returned."
 msgstr ""
 
-#: src/Admin/TestPage.php:261
-msgid "Image Refinement"
-msgstr ""
-
-#: src/Admin/TestPage.php:270
-msgid "Describe how you want to refine the reference image..."
-msgstr ""
-
-#: src/Admin/TestPage.php:275
-msgid "Reference Image"
-msgstr ""
-
-#: src/Admin/TestPage.php:279
-msgid "Required for image refinement. The provider will modify this image based on the prompt."
-msgstr ""
-
-#. translators: %s is the original filename of the uploaded reference image.
-#: src/Admin/TestPage.php:283
-#, php-format
-msgid "Last uploaded: %s"
-msgstr ""
-
-#: src/Admin/TestPage.php:93
-msgid "Reference image must be smaller than 10 MB."
-msgstr ""

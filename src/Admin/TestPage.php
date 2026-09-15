@@ -55,9 +55,8 @@ class TestPage
             'duetgaicon-test-page',
             'customAiTestPage',
             array(
-                'textPlaceholder'        => __('Enter your text prompt...', 'duetg-ai-connector'),
-                'imagePlaceholder'       => __('Describe the image you want to generate...', 'duetg-ai-connector'),
-                'imageRefinePlaceholder' => __('Describe how you want to refine the reference image...', 'duetg-ai-connector'),
+                'textPlaceholder'  => __('Enter your text prompt...', 'duetg-ai-connector'),
+                'imagePlaceholder' => __('Describe the image you want to generate...', 'duetg-ai-connector'),
             )
         );
 
@@ -65,53 +64,13 @@ class TestPage
         $prompt = '';
         $result = null;
         $error = null;
-        $reference_data_uri = null;
-        $reference_filename = '';
 
         if (isset($_POST['test_submit']) && check_admin_referer('duetgaicon_test_action')) {
             $provider_type = isset($_POST['provider_type']) ? sanitize_text_field(wp_unslash($_POST['provider_type'])) : 'text';
             $prompt = isset($_POST['prompt']) ? sanitize_text_field(wp_unslash($_POST['prompt'])) : '';
 
-            // For image refinement we need both a prompt and a reference image.
-            $needs_reference = ($provider_type === 'image_refine');
-            $reference_data_uri = null;
-            $reference_filename = '';
-
-            if ($needs_reference) {
-                // Validate upload: check error code, size, and verify MIME type
-                // server-side instead of trusting the client-provided type.
-                $upload_ok = !empty($_FILES['reference_image']['tmp_name'])
-                    && isset($_FILES['reference_image']['error'])
-                    && $_FILES['reference_image']['error'] === UPLOAD_ERR_OK
-                    && is_uploaded_file($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validates the tmp_name
-
-                if ($upload_ok) {
-                    // Enforce 10 MB size limit to prevent memory exhaustion
-                    // from file_get_contents() + base64_encode().
-                    $max_size = 10 * 1024 * 1024; // 10 MB
-                    $file_size = filesize($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated above
-                    if ($file_size !== false && $file_size > $max_size) {
-                        $error = __('Reference image must be smaller than 10 MB.', 'duetg-ai-connector');
-                    } else {
-                        $bytes = file_get_contents($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated the tmp_name above
-
-                        // Determine MIME type server-side via wp_check_filetype(),
-                        // falling back to client-provided type only if necessary.
-                        $reference_filename = !empty($_FILES['reference_image']['name']) ? sanitize_file_name($_FILES['reference_image']['name']) : 'reference.png';
-                        $filetype = wp_check_filetype($reference_filename);
-                        $mime = !empty($filetype['type']) ? $filetype['type'] : 'image/png';
-
-                        if ($bytes !== false && $bytes !== '') {
-                            $reference_data_uri = 'data:' . $mime . ';base64,' . base64_encode($bytes);
-                        }
-                    }
-                }
-            }
-
             if (empty($prompt)) {
                 $error = __('Please enter a prompt.', 'duetg-ai-connector');
-            } elseif ($needs_reference && $reference_data_uri === null) {
-                $error = __('Please upload a reference image for image refinement.', 'duetg-ai-connector');
             } else {
                 try {
                     if (!class_exists('WordPress\AiClient\AiClient')) {
@@ -139,7 +98,6 @@ class TestPage
                                 ]);
                             }
                         } else {
-                            // 'image' or 'image_refine' — both route through the image provider.
                             if (!$registry->hasProvider('duetgaicon_image')) {
                                 $error = __('Image provider not registered.', 'duetg-ai-connector');
                             } elseif (!$registry->isProviderConfigured('duetgaicon_image')) {
@@ -152,16 +110,10 @@ class TestPage
                                 );
                             } else {
                                 $model = $registry->getProviderModel('duetgaicon_image', CustomImageProvider::getModelId());
-
-                                $parts = [new \WordPress\AiClient\Messages\DTO\MessagePart($prompt)];
-                                if ($reference_data_uri !== null) {
-                                    $parts[] = new \WordPress\AiClient\Messages\DTO\MessagePart(
-                                        new \WordPress\AiClient\Files\DTO\File($reference_data_uri)
-                                    );
-                                }
-
                                 $result = $model->generateImageResult([
-                                    new \WordPress\AiClient\Messages\DTO\UserMessage($parts)
+                                    new \WordPress\AiClient\Messages\DTO\UserMessage([
+                                        new \WordPress\AiClient\Messages\DTO\MessagePart($prompt)
+                                    ])
                                 ]);
                             }
                         }
@@ -271,7 +223,7 @@ class TestPage
 
             <div class="card" style="max-width: 100%; margin-top: 20px;">
                 <h2><?php esc_html_e('Test AI', 'duetg-ai-connector'); ?></h2>
-                <form method="post" enctype="multipart/form-data" style="margin-top: 15px;">
+                <form method="post" style="margin-top: 15px;">
                     <?php wp_nonce_field('duetgaicon_test_action'); ?>
                     <table class="form-table">
                         <tr>
@@ -282,7 +234,6 @@ class TestPage
                                 <select name="provider_type" id="provider_type">
                                     <option value="text" <?php selected($provider_type, 'text'); ?>><?php esc_html_e('Text Generation', 'duetg-ai-connector'); ?></option>
                                     <option value="image" <?php selected($provider_type, 'image'); ?>><?php esc_html_e('Image Generation', 'duetg-ai-connector'); ?></option>
-                                    <option value="image_refine" <?php selected($provider_type, 'image_refine'); ?>><?php esc_html_e('Image Refinement', 'duetg-ai-connector'); ?></option>
                                 </select>
                             </td>
                         </tr>
@@ -291,29 +242,12 @@ class TestPage
                                 <label for="prompt"><?php esc_html_e('Prompt', 'duetg-ai-connector'); ?></label>
                             </th>
                             <td>
-                                <textarea name="prompt" id="prompt" rows="4" class="large-text" placeholder="<?php echo $provider_type === 'text' ? esc_attr__('Enter your text prompt...', 'duetg-ai-connector') : ($provider_type === 'image_refine' ? esc_attr__('Describe how you want to refine the reference image...', 'duetg-ai-connector') : esc_attr__('Describe the image you want to generate...', 'duetg-ai-connector')); ?>"><?php echo $prompt !== '' ? esc_textarea($prompt) : ''; ?></textarea>
-                            </td>
-                        </tr>
-                        <tr id="reference_image_row" style="display: <?php echo $provider_type === 'image_refine' ? 'table-row' : 'none'; ?>;">
-                            <th scope="row">
-                                <label for="reference_image"><?php esc_html_e('Reference Image', 'duetg-ai-connector'); ?></label>
-                            </th>
-                            <td>
-                                <input type="file" name="reference_image" id="reference_image" accept="image/png,image/jpeg,image/webp,image/gif" />
-                                <p class="description"><?php esc_html_e('Required for image refinement. The provider will modify this image based on the prompt.', 'duetg-ai-connector'); ?></p>
-                                <?php if ($reference_filename !== ''): ?>
-                                    <p class="description"><?php echo esc_html(sprintf(
-                                        // translators: %s is the original filename of the uploaded reference image.
-                                        __('Last uploaded: %s', 'duetg-ai-connector'),
-                                        $reference_filename
-                                    )); ?></p>
-                                <?php endif; ?>
+                                <textarea name="prompt" id="prompt" rows="4" class="large-text" placeholder="<?php echo $provider_type === 'text' ? esc_attr__('Enter your text prompt...', 'duetg-ai-connector') : esc_attr__('Describe the image you want to generate...', 'duetg-ai-connector'); ?>"><?php echo $prompt !== '' ? esc_textarea($prompt) : ''; ?></textarea>
                             </td>
                         </tr>
                     </table>
                     <?php submit_button(esc_html__('Generate', 'duetg-ai-connector'), 'primary', 'test_submit'); ?>
                 </form>
-
             </div>
 
             <?php if (defined('DUETGAICON_ALLOW_LOCAL_URLS') && DUETGAICON_ALLOW_LOCAL_URLS): ?>
