@@ -696,7 +696,7 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         // Block localhost variations
         // wp_parse_url() preserves brackets for IPv6 (e.g. '[::1]'), so we
         // must check both bare and bracketed forms.
-        $localhosts = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', '[::]', '::'];
+        $localhosts = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', '[::]'];
         if (in_array(strtolower($host), $localhosts, true)) {
             throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
                 'Image URL must not point to localhost'
