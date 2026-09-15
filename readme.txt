@@ -270,6 +270,9 @@ review the terms of service and privacy policy of their chosen provider:
 
 == Upgrade Notice ==
 
+= 0.3.5 =
+Adds image refinement support (OpenAI images/edits and MiniMax inline dispatch), Test AI admin verification, and PHP 7.4-8.x compatibility fixes.
+
 = 0.2.3 =
 This version fixes an OutputNotEscaped error in the Test AI page.
 

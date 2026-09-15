@@ -35,7 +35,7 @@ class MiniMaxHandler implements ModelHandlerInterface
     public function applies(string $modelId): bool
     {
         foreach (self::MINIMAX_PREFIXES as $prefix) {
-            if (strpos($modelId, $prefix) === 0) {
+            if (stripos($modelId, $prefix) === 0) {
                 return true;
             }
         }

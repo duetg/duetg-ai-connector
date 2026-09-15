@@ -37,6 +37,10 @@ class TestPage
      */
     public static function render(): void
     {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
         $plugin_url = plugin_dir_url(dirname(__DIR__, 2) . '/duetg-ai-connector.php');
         $js_url = $plugin_url . 'assets/js/test-page.js';
         // test-page.js is vanilla JS — no jQuery dependency.
@@ -45,12 +49,17 @@ class TestPage
             $js_url,
             array(),
             filemtime(dirname(__DIR__, 2) . '/assets/js/test-page.js'),
-            false
+            true
         );
-
-        if (!current_user_can('manage_options')) {
-            return;
-        }
+        wp_localize_script(
+            'duetgaicon-test-page',
+            'customAiTestPage',
+            array(
+                'textPlaceholder'        => __('Enter your text prompt...', 'duetg-ai-connector'),
+                'imagePlaceholder'       => __('Describe the image you want to generate...', 'duetg-ai-connector'),
+                'imageRefinePlaceholder' => __('Describe how you want to refine the reference image...', 'duetg-ai-connector'),
+            )
+        );
 
         $provider_type = 'text';
         $prompt = '';

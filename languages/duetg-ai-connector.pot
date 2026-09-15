@@ -2,7 +2,7 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: DuetG AI Connector 0.3.4\n"
+"Project-Id-Version: DuetG AI Connector 0.3.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/duetg-ai-connector\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -300,4 +300,34 @@ msgstr ""
 
 #: src/Provider/CustomTextProvider.php:37
 msgid "Text generation with custom OpenAI-compatible API provider"
+msgstr ""
+
+#: src/Admin/TestPage.php:90
+msgid "Please upload a reference image for image refinement."
+msgstr ""
+
+#: src/Admin/TestPage.php:195
+msgid "No image files returned."
+msgstr ""
+
+#: src/Admin/TestPage.php:261
+msgid "Image Refinement"
+msgstr ""
+
+#: src/Admin/TestPage.php:270
+msgid "Describe how you want to refine the reference image..."
+msgstr ""
+
+#: src/Admin/TestPage.php:275
+msgid "Reference Image"
+msgstr ""
+
+#: src/Admin/TestPage.php:279
+msgid "Required for image refinement. The provider will modify this image based on the prompt."
+msgstr ""
+
+#. translators: %s is the original filename of the uploaded reference image.
+#: src/Admin/TestPage.php:283
+#, php-format
+msgid "Last uploaded: %s"
 msgstr ""
