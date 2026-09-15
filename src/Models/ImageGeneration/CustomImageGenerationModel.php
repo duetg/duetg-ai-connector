@@ -41,6 +41,18 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
     private $minimaxImageHandler;
 
     /**
+     * Multipart boundary used by the most recent image-edits request.
+     *
+     * Stored as instance state rather than a local because we assemble the
+     * body in {@see self::buildMultipartBody()} and want the caller to be
+     * able to reach it without threading it through every signature.
+     *
+     * @since 0.3.5
+     * @var string|null
+     */
+    private $multipartBoundary;
+
+    /**
      * Get the base URL for API requests
      *
      * @return string
@@ -98,6 +110,342 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         $path = $this->getMinimaxImageHandler()->remapPath($path, $base_url, $model_id);
 
         return new Request($method, $base_url . '/' . ltrim($path, '/'), $headers, $data);
+    }
+
+    /**
+     * Generate an image result, routing to OpenAI's `images/edits` endpoint
+     * when the prompt contains a reference file (image refinement), or to
+     * the standard `images/generations` endpoint otherwise.
+     *
+     * The upstream `AbstractOpenAiCompatibleImageGenerationModel::generateImageResult()`
+     * always targets `images/generations` and relies on `preparePromptParam()`,
+     * which throws if the user message contains a non-text part. To support
+     * refinement we override here: walk the messages, pull out the first
+     * inline File part if present, and hand it off to
+     * {@see self::sendImageEditRequest()}. When no reference is present we
+     * delegate to the parent unchanged.
+     *
+     * @since 0.3.5
+     *
+     * @param array<int, Message> $prompt
+     * @return GenerativeAiResult
+     */
+    public function generateImageResult(array $prompt): GenerativeAiResult
+    {
+        $referenceFile = $this->extractReferenceFile($prompt);
+
+        if ($referenceFile !== null) {
+            return $this->sendImageEditRequest($prompt, $referenceFile);
+        }
+
+        return parent::generateImageResult($prompt);
+    }
+
+    /**
+     * Walk the prompt messages looking for an inline image File attached by
+     * the AI Client's prompt builder via `with_file()`. Returns the first
+     * match or null if no reference is present (i.e. a plain generation).
+     *
+     * @since 0.3.5
+     *
+     * @param array<int, Message> $prompt
+     * @return File|null
+     */
+    private function extractReferenceFile(array $prompt): ?File
+    {
+        foreach ($prompt as $message) {
+            foreach ($message->getParts() as $part) {
+                if (!$part->getType()->isFile()) {
+                    continue;
+                }
+                $file = $part->getFile();
+                if ($file !== null && $file->isImage()) {
+                    return $file;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Send an image-edits (refinement) request to the configured provider.
+     *
+     * Dispatches between two strategies based on whether the MiniMax
+     * handler applies to the current Base URL + model id combination:
+     *
+     *   - MiniMax: MiniMax does not expose OpenAI's `images/edits`
+     *     endpoint. The handler returns a JSON body for MiniMax's
+     *     `image_generation` endpoint that carries the reference image
+     *     inline (base64 data URI) alongside the prompt. Sent via
+     *     `wp_remote_post()` as `application/json`.
+     *
+     *   - Everyone else (default OpenAI-compatible contract): POST to
+     *     `images/edits` with `multipart/form-data` containing the
+     *     reference image, prompt, model, and metadata fields.
+     *
+     * The PSR-7 transporter in php-ai-client only supports JSON /
+     * urlencoded bodies, so both branches bypass it and use
+     * `wp_remote_post()` directly.
+     *
+     * @since 0.3.5
+     *
+     * @param array<int, Message> $prompt
+     * @param File                $referenceFile The reference image (inline base64).
+     * @return GenerativeAiResult
+     */
+    private function sendImageEditRequest(array $prompt, File $referenceFile): GenerativeAiResult
+    {
+        $baseUrl = $this->getBaseUrl();
+        $modelId = $this->metadata()->getId();
+        $handler = $this->getMinimaxImageHandler();
+
+        $text = $this->extractPromptText($prompt);
+        if ($text === null) {
+            throw new \WordPress\AiClient\Common\Exception\InvalidArgumentException(
+                'Image refinement requires a prompt that contains text in addition to the reference image.'
+            );
+        }
+
+        $base64 = $referenceFile->getBase64Data();
+        if ($base64 === null) {
+            throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
+                'The reference image must be provided as inline base64 data for the edits API.'
+            );
+        }
+
+        $mimeType = $referenceFile->getMimeType() !== '' ? $referenceFile->getMimeType() : 'image/png';
+
+        // Compute the response_format that the provider accepts. MiniMax
+        // remaps to "base64"; everyone else keeps OpenAI's "b64_json".
+        $params         = $handler->prepareParams(['response_format' => 'b64_json'], $baseUrl, $modelId);
+        $responseFormat = isset($params['response_format']) ? (string) $params['response_format'] : 'b64_json';
+        $expectedMime   = isset($params['output_format']) && is_string($params['output_format'])
+            ? 'image/' . $params['output_format']
+            : 'image/png';
+
+        $config = $this->getConfig();
+
+        // n (candidate count).
+        $candidateCount = $config->getCandidateCount();
+        $size           = null;
+        $orientation    = $config->getOutputMediaOrientation();
+        $aspectRatio    = $config->getOutputMediaAspectRatio();
+        if ($orientation !== null || $aspectRatio !== null) {
+            $size = $this->prepareSizeParam($orientation, $aspectRatio);
+        }
+
+        $authHeader = $this->resolveAuthHeader($baseUrl . '/');
+
+        // MiniMax does not implement `images/edits`; its handler returns
+        // a JSON body for the inline-image `image_generation` endpoint.
+        $minimaxBody = $handler->prepareEditBody(
+            $base64,
+            $mimeType,
+            $text,
+            $modelId,
+            $responseFormat,
+            $baseUrl
+        );
+
+        if ($minimaxBody !== null) {
+            // MiniMax path: JSON to image_generation with inline reference.
+            $path = $handler->remapEditsPath('images/edits', $baseUrl, $modelId);
+            $url  = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+            $wpResponse = wp_remote_post(
+                $url,
+                [
+                    'method'   => 'POST',
+                    'timeout'  => $this->getRequestOptions() !== null ? $this->getRequestOptions()->getTimeout() : 30,
+                    'headers'  => array_filter([
+                        'Authorization' => $authHeader,
+                        'Content-Type'  => 'application/json',
+                    ]),
+                    'body'        => wp_json_encode($minimaxBody),
+                    'data_format' => 'body',
+                ]
+            );
+        } else {
+            // Default OpenAI-compatible path: multipart to images/edits.
+            $path = $handler->remapEditsPath('images/edits', $baseUrl, $modelId);
+            $url  = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+
+            $binary = base64_decode($base64, true);
+            if ($binary === false) {
+                throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
+                    'The reference image base64 data could not be decoded.'
+                );
+            }
+
+            $fields = [
+                'model'           => $modelId,
+                'prompt'          => $text,
+                'image'           => $binary,
+                'mime'            => $mimeType,
+                'response_format' => $responseFormat,
+            ];
+            if ($candidateCount !== null) {
+                $fields['n'] = (string) $candidateCount;
+            }
+            if ($size !== null) {
+                $fields['size'] = $size;
+            }
+
+            $body     = $this->buildMultipartBody($fields);
+            $boundary = $this->multipartBoundary;
+
+            $wpResponse = wp_remote_post(
+                $url,
+                [
+                    'method'   => 'POST',
+                    'timeout'  => $this->getRequestOptions() !== null ? $this->getRequestOptions()->getTimeout() : 30,
+                    'headers'  => array_filter([
+                        'Authorization' => $authHeader,
+                        'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
+                    ]),
+                    'body'        => $body,
+                    'data_format' => 'body',
+                ]
+            );
+        }
+
+        if (is_wp_error($wpResponse)) {
+            throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
+                sprintf('Image edit request failed: %s', $wpResponse->get_error_message())
+            );
+        }
+
+        $statusCode = wp_remote_retrieve_response_code($wpResponse);
+        $headers    = wp_remote_retrieve_headers($wpResponse);
+        $body       = wp_remote_retrieve_body($wpResponse);
+
+        $response = new Response(
+            $statusCode,
+            is_array($headers) ? $headers : [],
+            $body
+        );
+
+        $this->throwIfNotSuccessful($response);
+
+        return $this->parseResponseToGenerativeAiResult($response, $expectedMime);
+    }
+
+    /**
+     * Run the provider's request authentication against a placeholder URI
+     * and return the resulting `Authorization` header value, or null if
+     * the configured auth strategy does not set one.
+     *
+     * @since 0.3.5
+     *
+     * @param string $placeholderUri A URI used only to satisfy the
+     *                               Request constructor; its value is
+     *                               discarded.
+     * @return string|null
+     */
+    private function resolveAuthHeader(string $placeholderUri): ?string
+    {
+        try {
+            $request = $this->getRequestAuthentication()->authenticateRequest(
+                new Request(HttpMethodEnum::POST(), $placeholderUri)
+            );
+        } catch (\Throwable $t) {
+            return null;
+        }
+        if (!$request->hasHeader('Authorization')) {
+            return null;
+        }
+        $values = $request->getHeader('Authorization');
+        return ($values !== null && isset($values[0])) ? $values[0] : null;
+    }
+
+
+    /**
+     * Extract the prompt text from a list of messages, mirroring the SDK's
+     * `preparePromptParam()` validation (single user message with a text
+     * part).
+     *
+     * @since 0.3.5
+     *
+     * @param array<int, Message> $messages
+     * @return string|null
+     */
+    private function extractPromptText(array $messages): ?string
+    {
+        if (count($messages) !== 1) {
+            return null;
+        }
+        $message = $messages[0];
+        if (!$message->getRole()->isUser()) {
+            return null;
+        }
+        foreach ($message->getParts() as $part) {
+            $text = $part->getText();
+            if ($text !== null) {
+                return $text;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Build a multipart/form-data body string with a deterministic
+     * boundary, suitable for `wp_remote_post()`'s `body` parameter.
+     *
+     * @since 0.3.5
+     *
+     * @param array<string, string|int> $fields
+     * @return string
+     */
+    private function buildMultipartBody(array $fields): string
+    {
+        $boundary = '----DuetGAIConnectorBoundary' . bin2hex(random_bytes(8));
+        $eol      = "\r\n";
+        $body     = '';
+
+        foreach ($fields as $name => $value) {
+            $body .= '--' . $boundary . $eol;
+
+            if ($name === 'image') {
+                $mime = isset($fields['mime']) ? (string) $fields['mime'] : 'image/png';
+                $body .= 'Content-Disposition: form-data; name="image"; filename="reference.' . $this->mimeToExtension($mime) . '"' . $eol;
+                $body .= 'Content-Type: ' . $mime . $eol . $eol;
+                $body .= (string) $value . $eol;
+                continue;
+            }
+
+            $body .= 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol;
+            $body .= (string) $value . $eol;
+        }
+
+        $body .= '--' . $boundary . '--' . $eol;
+
+        // Stash the boundary so the caller can set the Content-Type header
+        // (wp_remote_post uses `body` not `multipart`, so we set the header
+        // ourselves via a filter).
+        $this->multipartBoundary = $boundary;
+
+        return $body;
+    }
+
+    /**
+     * Map a MIME type to a file extension for the multipart `filename=`
+     * parameter. OpenAI and most OpenAI-compatible providers don't actually
+     * look at this, but some sniff the extension.
+     *
+     * @since 0.3.5
+     *
+     * @param string $mime
+     * @return string
+     */
+    private function mimeToExtension(string $mime): string
+    {
+        $map = [
+            'image/png'  => 'png',
+            'image/jpeg' => 'jpg',
+            'image/jpg'  => 'jpg',
+            'image/webp' => 'webp',
+            'image/gif'  => 'gif',
+        ];
+        return $map[strtolower($mime)] ?? 'png';
     }
 
     /**

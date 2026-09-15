@@ -39,7 +39,25 @@ class CustomImageModelMetadataDirectory implements ModelMetadataDirectoryInterfa
             $modelId,
             [CapabilityEnum::imageGeneration()],
             [
-                new SupportedOption(OptionEnum::inputModalities(), [[ModalityEnum::text()]]),
+                // Accept either text-only prompts (generations) or text+image
+                // prompts (refinements). The official AI plugin's Generate_Image
+                // ability calls `is_supported_for_image_generation()`, which
+                // walks these variants and only returns true if one of them
+                // matches the messages in the prompt builder. Without image
+                // here, every reference-bearing request would surface as
+                // "Image refinement failed. Please ensure you have a
+                // connected provider that supports image refinement..."
+                // regardless of whether the configured model can actually
+                // edit. (Per the upstream prompt builder, providers that
+                // truly can't refine will still return a model-level error
+                // when the API rejects the image input.)
+                new SupportedOption(
+                    OptionEnum::inputModalities(),
+                    [
+                        [ModalityEnum::text()],
+                        [ModalityEnum::text(), ModalityEnum::image()],
+                    ]
+                ),
                 new SupportedOption(OptionEnum::outputModalities(), [[ModalityEnum::image()]]),
                 new SupportedOption(OptionEnum::outputMediaOrientation(), [
                     MediaOrientationEnum::square(),

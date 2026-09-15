@@ -76,6 +76,16 @@ class MiniMaxImageHandler
     private const OPENAI_IMAGE_PATH = 'images/generations';
 
     /**
+     * Default image edits path used by the SDK for refinement requests
+     * (OpenAI convention). MiniMax does not expose this path; refinement
+     * falls back to {@see self::MINIMAX_IMAGE_PATH} via
+     * {@see self::remapEditsPath()}.
+     *
+     * @var string
+     */
+    private const OPENAI_IMAGE_EDITS_PATH = 'images/edits';
+
+    /**
      * Response format value MiniMax expects when we want inline base64.
      *
      * @var string
@@ -127,6 +137,83 @@ class MiniMaxImageHandler
             return $path;
         }
         return self::MINIMAX_IMAGE_PATH;
+    }
+
+    /**
+     * Remap the image-edits (refinement) endpoint path if this handler
+     * applies.
+     *
+     * MiniMax does not expose the OpenAI `images/edits` path. Refinement
+     * requests on MiniMax fall back to MiniMax's `image_generation`
+     * endpoint, which (unlike OpenAI) accepts a reference image inline
+     * alongside the prompt rather than as a separate multipart upload.
+     *
+     * Returns the unchanged path when this handler does not apply — i.e.
+     * the standard OpenAI-compatible edits endpoint is used as-is.
+     *
+     * @since 0.3.5
+     *
+     * @param string      $path The edits path the SDK wants to call.
+     * @param string|null $baseUrl The configured Base URL.
+     * @param string      $modelId The configured model id.
+     * @return string Possibly remapped path.
+     */
+    public function remapEditsPath(string $path, ?string $baseUrl, string $modelId): string
+    {
+        if (!$this->applies($modelId, $baseUrl)) {
+            return $path;
+        }
+        if ($path !== self::OPENAI_IMAGE_EDITS_PATH) {
+            return $path;
+        }
+        return self::MINIMAX_IMAGE_PATH;
+    }
+
+    /**
+     * Build the JSON body that MiniMax's `image_generation` endpoint
+     * accepts for a refinement request (prompt + reference image).
+     *
+     * OpenAI's `images/edits` endpoint requires multipart/form-data; MiniMax
+     * accepts the same conceptual payload as a JSON object whose
+     * `image` field carries either a public URL OR a base64-encoded data
+     * URI (the `data:image/...;base64,...` form). This helper produces the
+     * JSON shape so refinement can be sent to MiniMax via
+     * `wp_remote_post()` with `Content-Type: application/json`.
+     *
+     * Returns null when this handler does not apply — callers should fall
+     * back to the OpenAI multipart edits flow in that case.
+     *
+     * @since 0.3.5
+     *
+     * @param string      $base64     Raw base64 of the reference image (no
+     *                                data URI prefix).
+     * @param string      $mimeType   MIME type of the reference image.
+     * @param string      $prompt     The user's refinement prompt text.
+     * @param string      $modelId    The configured model id.
+     * @param string      $responseFormat Either "base64" or "url".
+     * @param string|null $baseUrl    The configured Base URL.
+     * @return array|null
+     */
+    public function prepareEditBody(
+        string $base64,
+        string $mimeType,
+        string $prompt,
+        string $modelId,
+        string $responseFormat,
+        ?string $baseUrl
+    ): ?array {
+        if (!$this->applies($modelId, $baseUrl)) {
+            return null;
+        }
+
+        $dataUri = sprintf('data:%s;base64,%s', $mimeType !== '' ? $mimeType : 'image/png', $base64);
+
+        return [
+            'model'          => $modelId,
+            'prompt'         => $prompt,
+            'image'          => [$dataUri],
+            'response_format' => $responseFormat,
+        ];
     }
 
     /**
