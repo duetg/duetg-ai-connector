@@ -257,15 +257,15 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
 
         // If no message contains "json", append a note to the last message
         if (!$found) {
-            $lastIndex = count($data['messages']) - 1;
-            if ($lastIndex >= 0) {
-                $lastContent = $data['messages'][$lastIndex]['content'] ?? '';
+            $lastKey = array_key_last($data['messages']);
+            if ($lastKey !== null) {
+                $lastContent = $data['messages'][$lastKey]['content'] ?? '';
                 if (is_string($lastContent)) {
-                    $data['messages'][$lastIndex]['content'] = $lastContent . "\n\nPlease respond in JSON format.";
+                    $data['messages'][$lastKey]['content'] = $lastContent . "\n\nPlease respond in JSON format.";
                 } elseif (is_array($lastContent)) {
                     // For array content, add a text part
                     $lastContent[] = ['type' => 'text', 'text' => "\n\nPlease respond in JSON format."];
-                    $data['messages'][$lastIndex]['content'] = $lastContent;
+                    $data['messages'][$lastKey]['content'] = $lastContent;
                 }
             }
         }

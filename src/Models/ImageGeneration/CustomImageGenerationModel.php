@@ -373,17 +373,15 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
      */
     private function extractPromptText(array $messages): ?string
     {
-        if (count($messages) !== 1) {
-            return null;
-        }
-        $message = $messages[0];
-        if (!$message->getRole()->isUser()) {
-            return null;
-        }
-        foreach ($message->getParts() as $part) {
-            $text = $part->getText();
-            if ($text !== null) {
-                return $text;
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            $message = $messages[$i];
+            if ($message->getRole()->isUser()) {
+                foreach ($message->getParts() as $part) {
+                    $text = $part->getText();
+                    if ($text !== null && $text !== '') {
+                        return $text;
+                    }
+                }
             }
         }
         return null;
