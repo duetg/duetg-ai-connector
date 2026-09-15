@@ -149,6 +149,13 @@ $files = $result->toImageFiles();
 
 ## Changelog
 
+### 0.3.5
+* Added image refinement (modify a previously generated image with an additional prompt) by routing to OpenAI's `images/edits` endpoint with multipart/form-data when a reference file is attached
+* Extended image metadata input modalities to support both text-only and text+image prompt shapes so the official WordPress AI plugin's `is_supported_for_image_generation()` returns true for refinement requests
+* Added MiniMax-aware dispatch for refinement (MiniMax does not expose `images/edits`): refinement requests go to MiniMax's `image_generation` endpoint with the reference carried inline
+* Fixed MiniMax refinement wire format to use the API's `subject_reference` field (with `type: character` and the image as a base64 Data URL); the previous `image: [...]` payload was silently ignored by MiniMax, which caused refined images to look unrelated to the original
+* Added an "Image Refinement" option on the Test AI admin page so the feature can be exercised without the block editor
+
 ### 0.3.4
 * Added support for MiniMax image generation (image-01, image-01-live) via a dual-filter handler that matches MiniMax Base URL plus image-model prefix and bridges the four OpenAI/MiniMax API differences (endpoint path, response_format enum, response top-level shape, image delivery channel ordering)
 * Refactored MiniMax URL detection to a single substring check so future MiniMax regions and CDN domains work without a plugin update
