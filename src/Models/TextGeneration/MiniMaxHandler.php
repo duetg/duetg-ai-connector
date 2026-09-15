@@ -145,7 +145,8 @@ class MiniMaxHandler implements ModelHandlerInterface
         }
 
         // If reasoning_split didn't work (no reasoning_details), clean content using thinking tags
-        if (isset($message['content'])) {
+        // Guard: content must be a string (some APIs return array for multimodal).
+        if (isset($message['content']) && is_string($message['content'])) {
             $originalContent = $message['content'];
             $result = ThinkingTagHelper::clean($message['content']);
 

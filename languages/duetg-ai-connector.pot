@@ -331,3 +331,7 @@ msgstr ""
 #, php-format
 msgid "Last uploaded: %s"
 msgstr ""
+
+#: src/Admin/TestPage.php:93
+msgid "Reference image must be smaller than 10 MB."
+msgstr ""

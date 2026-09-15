@@ -66,17 +66,19 @@ class Helper
         }
 
         // Check for localhost variants
-        if ($parsed['host'] === 'localhost'
-            || $parsed['host'] === '127.0.0.1'
-            || $parsed['host'] === '::1'
-        ) {
+        // wp_parse_url() preserves brackets for IPv6 (e.g. '[::1]'), so we
+        // must check both bare and bracketed forms.
+        $localhosts = ['localhost', '127.0.0.1', '::1', '[::1]'];
+        if (in_array($parsed['host'], $localhosts, true)) {
             return true;
         }
 
         // If it's an IP address, check if it's a private/reserved IP
         // filter_var returns false for non-IP strings (like domain names)
-        if (filter_var($parsed['host'], FILTER_VALIDATE_IP) !== false) {
-            return filter_var($parsed['host'], FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+        // Trim brackets for IPv6 before passing to filter_var.
+        $bare_ip = trim($parsed['host'], '[]');
+        if (filter_var($bare_ip, FILTER_VALIDATE_IP) !== false) {
+            return filter_var($bare_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
         }
 
         // Domain names are never local URLs

@@ -598,7 +598,9 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         $this->validateImageUrl($url);
 
         // Try to fetch the image and convert to base64
-        $response = wp_remote_get($url, ['timeout' => 30]);
+        // Use wp_safe_remote_get() which validates safety on every redirect
+        // hop, preventing redirect-based SSRF (302 → internal IP).
+        $response = wp_safe_remote_get($url, ['timeout' => 30]);
 
         if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
             $body = wp_remote_retrieve_body($response);
@@ -694,7 +696,9 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         }
 
         // Block localhost variations
-        $localhosts = ['localhost', '127.0.0.1', '::1', '0.0.0.0', '::'];
+        // wp_parse_url() preserves brackets for IPv6 (e.g. '[::1]'), so we
+        // must check both bare and bracketed forms.
+        $localhosts = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', '[::]', '::'];
         if (in_array(strtolower($host), $localhosts, true)) {
             throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
                 'Image URL must not point to localhost'
@@ -702,8 +706,10 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
         }
 
         // Block private and reserved IP addresses
-        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false
-            && filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        // Trim brackets for IPv6 before passing to filter_var.
+        $bare_ip = trim($host, '[]');
+        if (filter_var($bare_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false
+            && filter_var($bare_ip, FILTER_VALIDATE_IP) !== false) {
             throw new \WordPress\AiClient\Providers\Http\Exception\ResponseException(
                 'Image URL must not point to a private or reserved IP address'
             );

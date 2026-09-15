@@ -78,17 +78,32 @@ class TestPage
             $reference_filename = '';
 
             if ($needs_reference) {
-                // is_uploaded_file() guarantees $_FILES['reference_image']['tmp_name'] is a real upload,
-                // so it is safe to read from here without further sanitization.
-                if (
-                    !empty($_FILES['reference_image']['tmp_name'])
-                    && is_uploaded_file($_FILES['reference_image']['tmp_name']) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validates the tmp_name
-                ) {
-                    $bytes = file_get_contents($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated the tmp_name on the line above
-                    $mime = !empty($_FILES['reference_image']['type']) ? sanitize_text_field($_FILES['reference_image']['type']) : 'image/png';
-                    $reference_filename = !empty($_FILES['reference_image']['name']) ? sanitize_file_name($_FILES['reference_image']['name']) : 'reference.png';
-                    if ($bytes !== false && $bytes !== '') {
-                        $reference_data_uri = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+                // Validate upload: check error code, size, and verify MIME type
+                // server-side instead of trusting the client-provided type.
+                $upload_ok = !empty($_FILES['reference_image']['tmp_name'])
+                    && isset($_FILES['reference_image']['error'])
+                    && $_FILES['reference_image']['error'] === UPLOAD_ERR_OK
+                    && is_uploaded_file($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validates the tmp_name
+
+                if ($upload_ok) {
+                    // Enforce 10 MB size limit to prevent memory exhaustion
+                    // from file_get_contents() + base64_encode().
+                    $max_size = 10 * 1024 * 1024; // 10 MB
+                    $file_size = filesize($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated above
+                    if ($file_size !== false && $file_size > $max_size) {
+                        $error = __('Reference image must be smaller than 10 MB.', 'duetg-ai-connector');
+                    } else {
+                        $bytes = file_get_contents($_FILES['reference_image']['tmp_name']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- is_uploaded_file() validated the tmp_name above
+
+                        // Determine MIME type server-side via wp_check_filetype(),
+                        // falling back to client-provided type only if necessary.
+                        $reference_filename = !empty($_FILES['reference_image']['name']) ? sanitize_file_name($_FILES['reference_image']['name']) : 'reference.png';
+                        $filetype = wp_check_filetype($reference_filename);
+                        $mime = !empty($filetype['type']) ? $filetype['type'] : 'image/png';
+
+                        if ($bytes !== false && $bytes !== '') {
+                            $reference_data_uri = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+                        }
                     }
                 }
             }

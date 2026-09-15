@@ -154,7 +154,7 @@ class Settings
                 );
             }
         } catch (\Exception $e) {
-            // Silently handle errors
+            Helper::debug('Failed to pass API keys to AI Client', ['error' => $e->getMessage()]);
         }
     }
 

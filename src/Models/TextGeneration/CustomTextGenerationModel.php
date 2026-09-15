@@ -125,13 +125,11 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
         $base_url = $this->getBaseUrl();
 
         // Debug logging - log final request details
-        if (defined('DUETGAICON_DEBUG') && DUETGAICON_DEBUG) {
-            Helper::debug('Request', [
-                'path' => $path,
-                'model' => $model_id,
-                'url' => $base_url . '/' . ltrim($path, '/'),
-            ]);
-        }
+        Helper::debug('Request', [
+            'path' => $path,
+            'model' => $model_id,
+            'url' => $base_url . '/' . ltrim($path, '/'),
+        ]);
 
         return new Request($method, $base_url . '/' . ltrim($path, '/'), $headers, $data);
     }
@@ -148,12 +146,10 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
     protected function parseResponseChoiceToCandidate(array $choiceData, int $index): \WordPress\AiClient\Results\DTO\Candidate
     {
         // Debug: log raw response data
-        if (defined('DUETGAICON_DEBUG') && DUETGAICON_DEBUG) {
-            Helper::debug('Response choice[' . $index . ']', [
-                'content' => isset($choiceData['message']['content']) ? substr($choiceData['message']['content'], 0, 500) : null,
-                'finish_reason' => $choiceData['finish_reason'] ?? null,
-            ]);
-        }
+        Helper::debug('Response choice[' . $index . ']', [
+            'content' => isset($choiceData['message']['content']) ? substr($choiceData['message']['content'], 0, 500) : null,
+            'finish_reason' => $choiceData['finish_reason'] ?? null,
+        ]);
 
         // Apply model-specific handler if available
         $handler = $this->getModelHandler();
@@ -170,7 +166,8 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
 
                 // Always check for thinking tags in content (regardless of reasoning_content value)
                 // and extract them to reasoning_content
-                if (!empty($content)) {
+                // Guard: content must be a string (some APIs return array for multimodal).
+                if (!empty($content) && is_string($content)) {
                     $result = ThinkingTagHelper::clean($content);
 
                     // Always update content with cleaned version (regardless of whether thinking was found)
@@ -203,9 +200,7 @@ class CustomTextGenerationModel extends AbstractOpenAiCompatibleTextGenerationMo
 
             // If the response looks like JSON (starts with [ or {), try to parse and normalize it
             if (preg_match('/^\s*[\[{]/', $content)) {
-                if (defined('DUETGAICON_DEBUG') && DUETGAICON_DEBUG) {
-                    Helper::debug('Detected JSON-like response, extracting and normalizing');
-                }
+                Helper::debug('Detected JSON-like response, extracting and normalizing');
                 $json_extracted = $this->getReviewNotesNormalizer()->extractJsonFromText($content);
                 if ($json_extracted !== null) {
                     $json_content = json_encode($json_extracted);
