@@ -154,6 +154,16 @@ $files = $result->toImageFiles();
 * Extended image metadata input modalities to support both text-only and text+image prompt shapes so the official WordPress AI plugin's `is_supported_for_image_generation()` returns true for refinement requests
 * Added MiniMax-aware dispatch for refinement (MiniMax does not expose `images/edits`): refinement requests go to MiniMax's `image_generation` endpoint with the reference carried inline
 * Fixed MiniMax refinement wire format to use the API's `subject_reference` field (with `type: character` and the image as a base64 Data URL); the previous `image: [...]` payload was silently ignored by MiniMax, which caused refined images to look unrelated to the original
+* Match MiniMax model prefixes case-insensitively, so model names like `MINIMAX-IMAGE-01` work alongside `minimax-image-01`
+* Fixed the image refinement multipart payload leaking the MIME type as a separate non-standard form-data field; preserved HTTP response headers (with object-or-array shape handling) when wrapping WordPress HTTP responses into the SDK Response object
+* Polyfilled `array_is_list()` in the MiniMax response handler for PHP < 8.1 compatibility
+* Localized the Test AI prompt placeholders via wp_localize_script
+* Security: hardened SSRF protection to block IPv6 bypasses — recognize `[::1]`/`[::]` bracketed forms and trim brackets before IP validation in both `validateImageUrl()` and `Helper::isLocalUrl()`
+* Security: replaced `wp_remote_get()` with `wp_safe_remote_get()` in image URL fetching to block redirect-based SSRF (a 302 redirect to an internal IP is now caught at every hop)
+* Security: hardened file upload validation on the Test AI page (`UPLOAD_ERR_OK` check, 10 MB size cap, server-side MIME detection via `wp_check_filetype()` instead of trusting the client-provided type)
+* Robustness: handle array-format content (multimodal API responses) without `TypeError` in `ThinkingTagHelper::clean()`
+* Robustness: image prompt extraction now searches backwards for the latest user message with text, supporting prompts that include system instructions or multiple messages
+* Removed the image refinement test UI from Tools > Test AI (eliminates the admin file upload attack surface); image refinement remains fully supported when triggered through the official WordPress AI plugin
 
 ### 0.3.4
 * Added support for MiniMax image generation (image-01, image-01-live) via a dual-filter handler that matches MiniMax Base URL plus image-model prefix and bridges the four OpenAI/MiniMax API differences (endpoint path, response_format enum, response top-level shape, image delivery channel ordering)
