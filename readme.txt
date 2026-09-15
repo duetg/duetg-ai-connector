@@ -159,7 +159,6 @@ This setting applies to both text and image models when using local AI providers
 * Localized the Test AI prompt placeholders via wp_localize_script
 * Security: hardened SSRF protection to block IPv6 bypasses — recognize `[::1]`/`[::]` bracketed forms and trim brackets before IP validation in both `validateImageUrl()` and `Helper::isLocalUrl()`
 * Security: replaced `wp_remote_get()` with `wp_safe_remote_get()` in image URL fetching to block redirect-based SSRF (a 302 redirect to an internal IP is now caught at every hop)
-* Security: hardened file upload validation on the Test AI page (`UPLOAD_ERR_OK` check, 10 MB size cap, server-side MIME detection via `wp_check_filetype()` instead of trusting the client-provided type)
 * Robustness: handle array-format content (multimodal API responses) without `TypeError` in `ThinkingTagHelper::clean()`
 * Robustness: image prompt extraction now searches backwards for the latest user message with text, supporting prompts that include system instructions or multiple messages
 
