@@ -191,7 +191,7 @@ class MiniMaxImageHandler
      * back to the OpenAI multipart edits flow in that case.
      *
      * @since 0.3.5
-     * @since 0.3.6 Reworked payload shape to match MiniMax's
+     * @since 0.3.5 Reworked payload shape to match MiniMax's
      *              `subject_reference` field. The previous `image: [...]`
      *              shape was a no-op against the MiniMax API.
      *
@@ -292,7 +292,7 @@ class MiniMaxImageHandler
         }
         // If `data` is already a list of choice-shaped objects, the response
         // is in OpenAI shape — leave it alone.
-        if (array_is_list($response['data'])) {
+        if ($this->isList($response['data'])) {
             return $response;
         }
 
@@ -363,5 +363,25 @@ class MiniMaxImageHandler
     private function modelMatchesMinimaxImage(string $modelId): bool
     {
         return strpos($modelId, self::MINIMAX_IMAGE_MODEL_PREFIX) === 0;
+    }
+
+    /**
+     * Check if an array is a list (0-indexed sequential integer keys).
+     *
+     * Polyfills array_is_list() for PHP < 8.1 environments where WordPress
+     * compat.php might not have loaded.
+     *
+     * @param array $arr
+     * @return bool
+     */
+    private function isList(array $arr): bool
+    {
+        if (function_exists('array_is_list')) {
+            return array_is_list($arr);
+        }
+        if ($arr === []) {
+            return true;
+        }
+        return array_keys($arr) === range(0, count($arr) - 1);
     }
 }

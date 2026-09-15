@@ -48,6 +48,10 @@ class TestPage
             false
         );
 
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
         $provider_type = 'text';
         $prompt = '';
         $result = null;
@@ -243,7 +247,7 @@ class TestPage
 
             <div class="card" style="max-width: 100%; margin-top: 20px;">
                 <h2><?php esc_html_e('Test AI', 'duetg-ai-connector'); ?></h2>
-                <form method="post" style="margin-top: 15px;">
+                <form method="post" enctype="multipart/form-data" style="margin-top: 15px;">
                     <?php wp_nonce_field('duetgaicon_test_action'); ?>
                     <table class="form-table">
                         <tr>

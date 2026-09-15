@@ -280,7 +280,6 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
                 'model'           => $modelId,
                 'prompt'          => $text,
                 'image'           => $binary,
-                'mime'            => $mimeType,
                 'response_format' => $responseFormat,
             ];
             if ($candidateCount !== null) {
@@ -290,7 +289,7 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
                 $fields['size'] = $size;
             }
 
-            $body     = $this->buildMultipartBody($fields);
+            $body     = $this->buildMultipartBody($fields, $mimeType);
             $boundary = $this->multipartBoundary;
 
             $wpResponse = wp_remote_post(
@@ -315,13 +314,16 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
             );
         }
 
-        $statusCode = wp_remote_retrieve_response_code($wpResponse);
-        $headers    = wp_remote_retrieve_headers($wpResponse);
-        $body       = wp_remote_retrieve_body($wpResponse);
+        $statusCode   = wp_remote_retrieve_response_code($wpResponse);
+        $headers      = wp_remote_retrieve_headers($wpResponse);
+        $body         = wp_remote_retrieve_body($wpResponse);
+        $headersArray = is_object($headers) && method_exists($headers, 'getAll')
+            ? $headers->getAll()
+            : (is_array($headers) ? $headers : []);
 
         $response = new Response(
             $statusCode,
-            is_array($headers) ? $headers : [],
+            $headersArray,
             $body
         );
 
@@ -394,21 +396,28 @@ class CustomImageGenerationModel extends AbstractOpenAiCompatibleImageGeneration
      * @since 0.3.5
      *
      * @param array<string, string|int> $fields
+     * @param string                    $mimeType MIME type of the reference image.
      * @return string
      */
-    private function buildMultipartBody(array $fields): string
+    private function buildMultipartBody(array $fields, string $mimeType = 'image/png'): string
     {
         $boundary = '----DuetGAIConnectorBoundary' . bin2hex(random_bytes(8));
         $eol      = "\r\n";
         $body     = '';
 
+        // If 'mime' was provided in $fields (e.g. by legacy callers), use it and strip it
+        // so it does not get emitted as a separate non-standard form-data field.
+        if (isset($fields['mime'])) {
+            $mimeType = (string) $fields['mime'];
+            unset($fields['mime']);
+        }
+
         foreach ($fields as $name => $value) {
             $body .= '--' . $boundary . $eol;
 
             if ($name === 'image') {
-                $mime = isset($fields['mime']) ? (string) $fields['mime'] : 'image/png';
-                $body .= 'Content-Disposition: form-data; name="image"; filename="reference.' . $this->mimeToExtension($mime) . '"' . $eol;
-                $body .= 'Content-Type: ' . $mime . $eol . $eol;
+                $body .= 'Content-Disposition: form-data; name="image"; filename="reference.' . $this->mimeToExtension($mimeType) . '"' . $eol;
+                $body .= 'Content-Type: ' . $mimeType . $eol . $eol;
                 $body .= (string) $value . $eol;
                 continue;
             }

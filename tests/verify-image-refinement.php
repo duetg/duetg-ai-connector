@@ -242,6 +242,10 @@ check(
     strpos($body, base64_decode($pngBase64, true)) !== false
 );
 check(
+    'multipart body does not leak separate mime form field',
+    strpos($body, 'name="mime"') === false
+);
+check(
     'multipart body uses CRLF line endings',
     strpos($body, "\r\n") !== false
 );
